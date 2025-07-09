@@ -1,0 +1,35 @@
+name: Dtex GitHub Monitor with Gmail
+
+on:
+  schedule:
+    - cron: '0 13 * * *'  # Runs daily at 1 PM UTC
+  workflow_dispatch:
+
+jobs:
+  email-alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Search GitHub for Repos
+        id: search
+        run: |
+          curl -s "https://api.github.com/search/repositories?q=insider+threat+OR+UEBA+OR+behavior+analytics+sort:updated-desc" > result.json
+          cat result.json | jq '[.items[] | {name: .full_name, url: .html_url, updated: .updated_at}]' > trimmed.json
+          echo "::set-output name=body::$(cat trimmed.json | jq -r '.[] | "- \(.name): \(.url) [\(.updated)]"' | head -n 10 | tr '\n' '%0A')"
+
+      - name: Send Email via Gmail SMTP
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASS }}
+          subject: "📡 GitHub Dtex Monitoring Alert"
+          to: ${{ secrets.EMAIL_TO }}
+          from: Dtex Monitor <${{ secrets.EMAIL_USER }}>
+          content_type: text
+          secure: true
+          body: |
+            🔍 Here are the latest GitHub updates for Dtex-related topics:
+
+            ${{ steps.search.outputs.body }}
